@@ -1,19 +1,38 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "ply_parser"
-version = "3.0.0"
-authors = [
-  { name="Krishna Bhattarai", email="krishna@kbhattarai.com" },
-]
-description = "A python module that parses ascii and binary PLY (.ply) (Polygon File Format) files. It includes a class PLYObject for storing PLY file data and a function parse_ply_file() for reading PLY files and creating PLYObject instances and can easily be customized."
+version = "3.0.1"
+description = "Zero-dependency parser for ASCII and binary PLY (Polygon File Format) files"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.8"
+authors = [
+  { name = "Krishna Bhattarai", email = "krishna@kbhattarai.com" },
+]
+keywords = ["ply", "polygon file format", "mesh", "3d", "point cloud", "parser"]
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    "Topic :: Scientific/Engineering :: Visualization",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/KrishnaMBhattarai/ply_parser"
-"Bug Tracker" = "https://github.com/KrishnaMBhattarai/ply_parser/issues"
+Homepage = "https://github.com/HimalayanSeer/ply_parser"
+"Bug Tracker" = "https://github.com/HimalayanSeer/ply_parser/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

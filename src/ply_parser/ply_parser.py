@@ -11,6 +11,7 @@ Raises ValueError with a readable message on malformed input.
 __all__ = ['PLYObject', 'get_file_data', 'parse_ply', 'parse_ply_file', 'parse_ply_file_data']
 
 import math
+import os
 import re
 import struct
 
@@ -44,6 +45,10 @@ class PLYObject:
         self.faces = faces
         self.colors = colors
         self.normals = normals if normals is not None else []
+
+    def __repr__(self):
+        return 'PLYObject(name=%r, vertices=%d, faces=%d, colors=%d, normals=%d)' % (
+            self.name, len(self.vertices), len(self.faces), len(self.colors), len(self.normals))
 
 
 class _Property:
@@ -218,6 +223,7 @@ def _read_body(h, r):
     el, e = None, 0
     try:
         for el in h['elements']:
+            e = 0
             is_vertex = el is vertex_el
             props = el.props
             if is_vertex:
@@ -296,12 +302,16 @@ def parse_ply(data, name=None):
 def parse_ply_file_data(lines):
     """Parse PLY data given as a list of lines, a str or bytes. Returns [vertices, faces, colors]."""
     if isinstance(lines, (list, tuple)):
-        lines = '\n'.join(line.rstrip('\r\n') for line in lines)
+        if lines and isinstance(lines[0], (bytes, bytearray)):
+            lines = b'\n'.join(bytes(line).rstrip(b'\r\n') for line in lines)
+        else:
+            lines = '\n'.join(line.rstrip('\r\n') for line in lines)
     obj = parse_ply(lines)
     return [obj.vertices, obj.faces, obj.colors]
 
 
 def parse_ply_file(file_name):
+    """Parse a PLY file (str, bytes or os.PathLike path) into a PLYObject named after it."""
     with open(file_name, 'rb') as file:
         data = file.read()
-    return parse_ply(data, file_name.strip())
+    return parse_ply(data, os.fsdecode(file_name))

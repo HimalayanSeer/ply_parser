@@ -1,134 +1,98 @@
-### PLY File Parser
-This Python module provides a simple PLY (Polygon File Format) file parser. It includes a class PLYObject for storing PLY file data and a function parse_ply_file for reading PLY files and creating PLYObject instances.
+# ply_parser
 
-### Requirements
-`Python 3.8+`
+[![Tests](https://github.com/HimalayanSeer/ply_parser/actions/workflows/test.yml/badge.svg)](https://github.com/HimalayanSeer/ply_parser/actions/workflows/test.yml)
+[![PyPI](https://img.shields.io/pypi/v/ply_parser)](https://pypi.org/project/ply_parser/)
+[![Python](https://img.shields.io/pypi/pyversions/ply_parser)](https://pypi.org/project/ply_parser/)
+[![Downloads](https://static.pepy.tech/badge/ply_parser)](https://pepy.tech/projects/ply_parser)
 
-### Installation
-```
-python3 -m pip install ply_parser
-```
+**Read PLY (Polygon File Format) files in Python, with zero dependencies.**
 
+`ply_parser` reads ASCII and binary PLY meshes into plain Python lists: vertices, faces, colors and normals. It follows the header, so unusual vertex layouts and extra elements are handled, and malformed files fail with a readable `ValueError` instead of silent garbage.
 
-### Usage
-### PLYObject Class
-The PLYObject class represents a PLY object with attributes:
-
-`name`: Name of the PLY object.
-
-`vertices`: List of vertex coordinates.
-
-`faces`: List of face indices.
-
-`colors`: List of RGB color values for vertices, as stored in the file (e.g. 0-255 for `uchar`). Empty if the file has no colors.
-
-`normals`: List of vertex normals (`nx ny nz` or `normal_x normal_y normal_z`). Empty if the file has no normals.
-
-
-#### parse_ply_file Function
-The parse_ply_file function takes a PLY file as input and returns a PLYObject instance. It reads the file, extracts vertices, faces, colors and normals according to the header. If the file is malformed (bad header, missing or extra data, invalid numbers, face indices out of range) it raises a `ValueError` with a readable message.
-```
-file = "data/cube_colors.ply"
-parsed_object = parse_ply_file(file)
-if parsed_object:
-    print("name:", parsed_object.name)
-    print("total_vertices:", len(parsed_object.vertices))
-    print("total_faces:", len(parsed_object.faces))
-    print("total_colors:", len(parsed_object.colors))
+```bash
+pip install ply_parser
 ```
 
-#### parse_ply and parse_ply_file_data
-`parse_ply(data, name=None)` parses PLY data that is already in memory (`str` for ascii files, `bytes` for any format) and returns a PLYObject.
+Requires Python 3.8+.
 
-`parse_ply_file_data(lines)` takes a list of lines (or a `str` / `bytes`) and returns `[vertices, faces, colors]`.
+## Quick start
 
+```python
+from ply_parser import parse_ply_file
 
-### PLY File Format Support
-This parser currently supports PLY files with the following characteristics:
+obj = parse_ply_file("cube.ply")
 
-`ascii`, `binary_little_endian` and `binary_big_endian` formats
-
-`Any vertex layout: properties in any order, extra properties and extra elements are skipped`
-
-`Vertex coordinates (X, Y, Z)`
-
-`Face indices (polygons with any number of vertices)`
-
-`Vertex colors and normals`
-
-### Testing
-```
-python3 -m unittest tests/test_ply_parser.py -v
+print(obj)                 # PLYObject(name='cube.ply', vertices=8, faces=12, colors=0, normals=0)
+print(obj.vertices[0])     # [-1.0, -1.0, 1.0]
+print(obj.faces[0])        # [0, 1, 2]
 ```
 
-### Limitations
-The parser follows the PLY specification and rejects files whose data does not match their header.
+## What you get
 
+`parse_ply_file()` takes a path (`str` or `pathlib.Path`) and returns a `PLYObject` with:
 
-### Contribution
-Feel free to contribute by opening issues or submitting pull requests. Bug reports, suggestions, and improvements are welcome.
+| Attribute  | Contents                                                              |
+| ---------- | --------------------------------------------------------------------- |
+| `name`     | The path you passed, or the `name` you gave `parse_ply()`             |
+| `vertices` | `[x, y, z]` floats for every vertex                                   |
+| `faces`    | Vertex indices for each face (any number of vertices per face)        |
+| `colors`   | `[r, g, b]` per vertex, as stored in the file. Empty if none          |
+| `normals`  | `[nx, ny, nz]` per vertex. Empty if none                              |
 
-### License
-This PLY file parser is licensed under the MIT License. See the LICENSE file for details.
+Colors keep their file values: a `uchar` channel is `0-255`.
 
-### Some info on how to publish packages to pypi
-Reference: https://packaging.python.org/en/latest/tutorials/packaging-projects/
+## Features
 
-```
-# upgrade pip and build tools
-python3 -m pip install --upgrade pip
-python3 -m pip install --upgrade build
-python3 -m pip install --upgrade twine
-```
+- **ASCII, binary little-endian and big-endian** formats
+- **Any header layout**: properties in any order, extra properties and extra elements are skipped
+- **Polygons, not just triangles**: faces keep every vertex index
+- **Colors and normals** picked up from `red/green/blue`, `r/g/b`, `diffuse_*`, `nx/ny/nz` or `normal_*` properties
+- **Strict by default**: header and body must agree, indices must be in range, coordinates must be finite
+- **Parse from memory** as well as from disk
 
-#### Build
-```
-python3 -m build
-```
+## Parsing data you already have
 
-##### That command genrates two files in the dist directory that looks like this
-```
-dist/
-├── ply_parser-1.0.0-py3-none-any.whl
-└── ply_parser-1.0.0-py3.tar.gz
-```
+```python
+from ply_parser import parse_ply
 
-##### The tar.gz file is a source distribution whereas the .whl file is a built distribution. Newer pip versions preferentially install built distributions, but will fall back to source distributions if needed. You should always upload a source distribution and provide built distributions for the platforms your project is compatible with
-
-### Uploading the distribution archives
-```#### To upload to test and prod pypi one needs have two separate accounts and auth tokens need to be setup and stored in $HOME/.pypirc```
-
-
-#### Uploading to test environment - TestPyPI - https://test.pypi.org/
-```
-python3 -m twine upload --repository testpypi dist/*
+with open("scan.ply", "rb") as f:
+    obj = parse_ply(f.read(), name="scan")
 ```
 
-##### Once uploaded the project becomes available at
-```
-https://test.pypi.org/project/ply_parser
+`parse_ply()` takes `str` for ASCII data or `bytes` for any format.
+
+For line-based input, `parse_ply_file_data()` returns the older `[vertices, faces, colors]` list:
+
+```python
+from ply_parser import parse_ply_file_data
+
+vertices, faces, colors = parse_ply_file_data(lines)
 ```
 
+## Handling bad files
 
-##### Download and test the upload locally in a virtual environment
-```
-python3 -m venv test_env
-source test_env/bin/activate
-python3 -m pip install --index-url https://test.pypi.org/simple/ --no-deps ply_parser
-python3
-# then do some tests here
-```
+```python
+from ply_parser import parse_ply_file
 
-##### Uploading to Production. 
-####  Upload to PyPI - https://pypi.org
-```
-twine upload dist/*
+try:
+    obj = parse_ply_file("broken.ply")
+except ValueError as err:
+    print(err)  # e.g. "PLY: vertex index 9 out of range (only 8 vertices) in face 0"
 ```
 
-#### The new package then becomes available at:  https://pypi.org/project/ply-parser/ and can be installed by
+## Development
+
+```bash
+git clone https://github.com/HimalayanSeer/ply_parser
+cd ply_parser
+pip install .
+python -m unittest tests/test_ply_parser.py -v
 ```
-python3 -m pip install ply_parser
-```
 
+## Contributing
 
+Issues and pull requests are welcome, especially sample PLY files that the parser gets wrong. Please include a small file that reproduces the problem.
 
+## License
+
+MIT. See [LICENSE](LICENSE).

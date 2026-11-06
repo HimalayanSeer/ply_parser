@@ -1,4 +1,5 @@
 import os
+import pathlib
 import struct
 import unittest
 from ply_parser import *
@@ -412,6 +413,122 @@ end_header
         self.assertEqual(result.faces[0], [0, 1, 2])
         self.assertEqual(result.colors, [])
         self.assertEqual(result.normals, [])
+
+    def test_parse_ply_file_accepts_path_objects(self):
+        result = parse_ply_file(pathlib.Path(CUBE))
+        self.assertEqual(result.name, CUBE)
+        self.assertEqual(len(result.vertices), 8)
+
+    def test_get_file_data_returns_lines(self):
+        lines = get_file_data(CUBE)
+        self.assertEqual(lines[0], 'ply\n')
+        self.assertIn('end_header\n', lines)
+
+    def test_parse_ply_file_data_accepts_str_and_byte_lines(self):
+        data = 'ply\nformat ascii 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n1 2 3\n'
+        self.assertEqual(parse_ply_file_data(data), [[[1, 2, 3]], [], []])
+        self.assertEqual(parse_ply_file_data(data.encode().splitlines(True)), [[[1, 2, 3]], [], []])
+        with self.assertRaises(ValueError):
+            parse_ply_file_data([])
+
+    def test_repr(self):
+        self.assertEqual(repr(parse_ply_file(CUBE)),
+                         'PLYObject(name=%r, vertices=8, faces=12, colors=0, normals=0)' % CUBE)
+
+    def test_reject_wrong_input_type(self):
+        with self.assertRaises(ValueError) as context:
+            parse_ply(123)
+        self.assertEqual(str(context.exception), 'PLY: input must be str or bytes')
+
+
+class TestHeaderErrors(unittest.TestCase):
+    def assertHeaderError(self, header_lines, message):
+        with self.assertRaises(ValueError) as context:
+            parse_ply('\n'.join(['ply'] + header_lines + ['end_header']) + '\n')
+        self.assertEqual(str(context.exception), message)
+
+    def test_empty_header(self):
+        with self.assertRaises(ValueError) as context:
+            parse_ply('end_header\n')
+        self.assertEqual(str(context.exception), 'PLY: file does not start with "ply"')
+
+    def test_missing_or_empty_format(self):
+        self.assertHeaderError(['element vertex 0'], 'PLY: missing "format" line')
+        self.assertHeaderError(['format'], 'PLY: unsupported format ""')
+
+    def test_bad_element_line(self):
+        self.assertHeaderError(['format ascii 1.0', 'element vertex'], 'PLY: bad element line "element vertex"')
+        self.assertHeaderError(['format ascii 1.0', 'element vertex abc'], 'PLY: bad element line "element vertex abc"')
+
+    def test_property_before_element(self):
+        self.assertHeaderError(['format ascii 1.0', 'property float x'],
+                               'PLY: property before any element: "property float x"')
+
+    def test_bad_property_lines(self):
+        self.assertHeaderError(['format ascii 1.0', 'element vertex 0', 'property float'],
+                               'PLY: bad property line "property float"')
+        self.assertHeaderError(['format ascii 1.0', 'element vertex 0', 'property list uchar vertex_indices'],
+                               'PLY: bad property line "property list uchar vertex_indices"')
+        self.assertHeaderError(['format ascii 1.0', 'element vertex 0', 'property foo x'],
+                               'PLY: unknown type "foo"')
+        self.assertHeaderError(['format ascii 1.0', 'element vertex 0', 'property list float int vertex_indices'],
+                               'PLY: list count type must be integer in "property list float int vertex_indices"')
+
+    def test_missing_vertex_element(self):
+        self.assertHeaderError(['format ascii 1.0', 'element face 0'], 'PLY: no "vertex" element')
+
+    def test_vertex_without_coordinates(self):
+        self.assertHeaderError(['format ascii 1.0', 'element vertex 1', 'property float x', 'property float y'],
+                               'PLY: vertex element has no "z" property')
+        self.assertHeaderError(['format ascii 1.0', 'element vertex 1', 'property list uchar float x',
+                                'property float y', 'property float z'],
+                               'PLY: vertex property "x" must not be a list')
+
+    def test_face_without_index_list(self):
+        self.assertHeaderError(['format ascii 1.0', 'element vertex 0', 'element face 1', 'property uchar flags'],
+                               'PLY: face element has no "vertex_indices" list property')
+
+
+class TestBodyErrors(unittest.TestCase):
+    VERTEX = 'element vertex 1\nproperty float x\nproperty float y\nproperty float z\n'
+
+    def assertBodyError(self, data, message):
+        with self.assertRaises(ValueError) as context:
+            parse_ply(data)
+        self.assertEqual(str(context.exception), message)
+
+    def test_non_finite_coordinates(self):
+        for bad in ('nan', 'inf', '-inf', '1e999'):
+            with self.subTest(bad=bad):
+                self.assertBodyError('ply\nformat ascii 1.0\n%send_header\n%s 0 0\n' % (self.VERTEX, bad),
+                                     'PLY: vertex 0 has a non-finite coordinate')
+
+    def test_invalid_list_lengths(self):
+        header = 'ply\nformat ascii 1.0\n%selement face 1\nproperty list char int vertex_indices\nend_header\n0 0 0\n'
+        self.assertBodyError(header % self.VERTEX + '-1\n', 'PLY: invalid list length -1 in face 0')
+        self.assertBodyError(header % self.VERTEX + '1.5 0\n', 'PLY: invalid list length 1.5 in face 0')
+
+    def test_non_integer_face_index(self):
+        self.assertBodyError('ply\nformat ascii 1.0\n%selement face 1\nproperty list uchar int vertex_indices\n'
+                             'end_header\n0 0 0\n1 0.5\n' % self.VERTEX,
+                             'PLY: vertex index 0.5 out of range (only 1 vertices) in face 0')
+
+    def test_ascii_skipped_list_runs_past_end(self):
+        self.assertBodyError('ply\nformat ascii 1.0\n%sproperty list uchar int extra\nend_header\n0 0 0 5 1\n' % self.VERTEX,
+                             'PLY: unexpected end of file in vertex 0')
+
+    def test_binary_skipped_list_runs_past_end(self):
+        header = ('ply\nformat binary_little_endian 1.0\n%sproperty list uchar int extra\nend_header\n' % self.VERTEX).encode()
+        self.assertBodyError(header + struct.pack('<fffBi', 0, 0, 0, 5, 1), 'PLY: unexpected end of file in vertex 0')
+
+    def test_binary_fixed_size_element_truncated_reports_its_own_index(self):
+        header = ('ply\nformat binary_little_endian 1.0\n%selement edge 2\nproperty int vertex1\n'
+                  'property int vertex2\nend_header\n' % self.VERTEX).encode()
+        body = struct.pack('<fff', 1, 2, 3) + struct.pack('<ii', 0, 0)
+        result = parse_ply(header + body + struct.pack('<ii', 0, 0))
+        self.assertEqual(result.vertices, [[1, 2, 3]])
+        self.assertBodyError(header + body, 'PLY: unexpected end of file in edge 0')
+        self.assertBodyError(header + body[:4], 'PLY: unexpected end of file in vertex 0')
 
 
 if __name__ == '__main__':
